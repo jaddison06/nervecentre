@@ -24,7 +24,7 @@
 #define DECL_VEC(type) DECL_VEC_NAMED(type, type##Vec)
 #define DECL_VEC_NO_TYPEDEF DECL_VEC_NO_TYPEDEF_NAMED(type, type##Vec)
 
-#define GET(vec, idx) &(vec).root[idx]
+#define GET(vec, idx) (vec).root[idx]
 
 #define FOREACH(type, vec, iterator) for (type* iterator = (vec).root; iterator - (vec).root < (vec).len; iterator++)
 

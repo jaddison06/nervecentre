@@ -1,3 +1,4 @@
 Makefile
 nervecentre*
 build/objects/
+.vscode/

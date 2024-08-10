@@ -1,35 +1,19 @@
 #include "widget.h"
 
 // I can fucking use global state if I want to
-static Renderer* renderer = NULL;
+static Platform* platform = NULL;
 
-// ---------- DECLARE METHODS HERE + 4 PLACES IN WIDGET.H ----------
-
+//! METHODS
 _DEF_RO_PROC_AUTO(init, void)
-_DEF_RO_PROC_WRAPPED(draw, void)
 _DEF_RO_PROC_AUTO(getChildren, RenderObjectVec*)
+_DEF_RO_PROC_AUTO(handleEvent, void)
+_DEF_RO_PROC_WRAPPED(draw, void)
 _DEF_RO_PROC_WRAPPED(destroy, void)
 
 void RO_draw(RenderObject* obj) {
-    if (obj->ctx.needsRedraw) {
-        _RO_draw(obj);
-        obj->ctx.needsRedraw = false;
-    }
-}
-
-void RO_markNeedsRedraw(RenderObject* obj) {
-    // Blackout last known position of object
-    // todo: does this work??
-    SetDrawColour(obj->ctx.ren, COL(0, 0, 0));
-    FillRect(obj->ctx.ren, V2(obj->ctx.x, obj->ctx.y), V2(obj->ctx.w, obj->ctx.h));
-
-    obj->ctx.needsRedraw = true;
-    RenderObjectVec* children = RO_getChildren(obj);
-    if (children != 0) {
-        FOREACH(RenderObject*, *children, child) {
-            RO_markNeedsRedraw(*child);
-        }
-    }
+    obj->ctx.platform = platform;
+    _RO_draw(obj);
+    obj->ctx.needsRedraw = false;
 }
 
 void RO_destroy(RenderObject* obj) {
@@ -38,24 +22,33 @@ void RO_destroy(RenderObject* obj) {
     free(obj);
 }
 
-void initUI(Renderer* ren) {
-    renderer = ren;
-}
-
 RenderContext _create_RenderContext(RenderObject* parent) {
     return (RenderContext){
-        .x = 0, .y = 0, .w = 0, .h = 0,
-        .ren = renderer,
+        .pos = V2(0, 0), .size = V2(0, 0),
+        .platform = 0,
         .needsRedraw = true,
         .parent = parent
     };
 }
 
-void RO_setBounds(RenderObject* obj, int x, int y, int w, int h) {
-    obj->ctx.x = x;
-    obj->ctx.y = y;
-    obj->ctx.w = w;
-    obj->ctx.h = h;
+void RO_setBounds(RenderObject* obj, Vec2 pos, Vec2 size) {
+    obj->ctx.pos = pos;
+    obj->ctx.size = size;
+}
+
+void RO_markNeedsRedraw(RenderObject* obj) {
+    // Blackout last known position of object
+    // todo: does this work??
+    SetDrawColour(obj->ctx.platform, COL(0, 0, 0));
+    FillRect(obj->ctx.platform, obj->ctx.pos, obj->ctx.size);
+
+    obj->ctx.needsRedraw = true;
+    RenderObjectVec* children = RO_getChildren(obj);
+    if (children != 0) {
+        FOREACH(RenderObject*, *children, child) {
+            RO_markNeedsRedraw(*child);
+        }
+    }
 }
 
 inline RenderObjectVec ROList(int count, ...) {
@@ -68,4 +61,21 @@ inline RenderObjectVec ROList(int count, ...) {
     }
     va_end(va);
     return out;
+}
+
+void RunUI(Platform* p, RenderObject* root, TextInputHandler textCB) {
+    platform = p;
+    bool quit = false;
+    while (!quit) {
+        Event* event;
+        while ((event = GetEvent(platform)) != NULL) {
+            if (event->class == Event_HandleAtTopLevel) {
+                if (event->tlType == EventType_Quit) { quit = true; break; }
+                if (event->tlType == EventType_TextInput) { textCB(event->text); continue; }
+            } else {
+                RO_handleEvent(root);
+            }
+        }
+        RO_draw(root);
+    };
 }
