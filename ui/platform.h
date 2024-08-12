@@ -21,8 +21,7 @@ typedef enum {
 typedef enum {
     EventType_MouseMotion,
     EventType_MouseDown,
-    EventType_MouseUp,
-    EventType_MouseDrag
+    EventType_MouseUp
 } PassthroughEvent;
 
 typedef enum {

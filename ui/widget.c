@@ -1,7 +1,7 @@
 #include "widget.h"
 
 // I can fucking use global state if I want to
-static Platform* platform = NULL;
+static Platform* platform = 0;
 
 //! METHODS
 _DEF_RO_PROC_AUTO(init, void)
@@ -16,19 +16,25 @@ void RO_draw(RenderObject* obj) {
     obj->ctx.needsRedraw = false;
 }
 
-// todo: mouse drag?!?!?!?!?!?!?! (NEEDS PLATFORM WORK)
+//* we're sending every event to every widget - i can't think of a better solution currently
+//* as imagine a button receives MouseDown that's inside its bounds but then the MouseUp occurs outside - 
+//* we need to send the button the MouseUp so it doesn't get stuck mid-press, but to do this while
+//* still minimizing the amount of widgets we deliver events to we'd need to idk set up some kind of
+//* callback system where a widget can "take ownership" of an event - that's the best idea i've got so far
+//* but honestly if sending everything to everything is performant then why change it
+// todo: is sending everything to everything performant?
 void RO_handleEvent(RenderObject* obj) {
-    Vec2 eventPos = obj->ctx.platform->event.ui.pos;
-    Vec2 objPos = obj->ctx.pos;
-    Vec2 objSize = obj->ctx.size;
-    if (
-        eventPos.x >= objPos.x &&
-        eventPos.x <= objPos.x + objSize.x &&
-        eventPos.y >= objPos.y &&
-        eventPos.y <= objPos.y + objSize.y
-    ) {
+    // Vec2 eventPos = obj->ctx.platform->event.ui.pos;
+    // Vec2 objPos = obj->ctx.pos;
+    // Vec2 objSize = obj->ctx.size;
+    // if (
+    //     eventPos.x >= objPos.x &&
+    //     eventPos.x <= objPos.x + objSize.x &&
+    //     eventPos.y >= objPos.y &&
+    //     eventPos.y <= objPos.y + objSize.y
+    // ) {
         _RO_handleEvent(obj);
-    }
+    // }
 }
 
 void RO_destroy(RenderObject* obj) {
@@ -91,7 +97,7 @@ void RunUI(Platform* p, RenderObject* root, TextInputHandler textCB) {
                 switch (event->tlType) {
                     case EventType_Quit: { quit = true; goto draw; } // HAHAHAHHAHAHAHHAHAHAHA
                     case EventType_TextInput: { textCB(event->text); continue; }
-                    case EventType_WindowResized: { _UPDATE_ROOTSIZE(); break; }
+                    case EventType_WindowResized: { _UPDATE_ROOTSIZE(); RO_markNeedsRedraw(root); break; }
                 }
             } else { RO_handleEvent(root); }
         }

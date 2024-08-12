@@ -121,7 +121,7 @@ _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_ME
 #define HASCHILDREN_getChildren(name) { return &cfg->_children; }
 #define HASCHILDREN_handleEvent(name) EXT_CALLSUPER(name, handleEvent)
 #define HASCHILDREN_draw(name) EXT_CALLSUPER(name, draw)
-#define HASCHILDREN_destroy(name) { DESTROY(cfg->_children); EXT_CALLSUPER(name, destroy); }
+#define HASCHILDREN_destroy(name) { EXT_CALLSUPER(name, destroy); DESTROY(cfg->_children); }
 
 typedef RenderObject (*BuildCB)();
 // Yippeeeeeee extension nesting i sure do hope this doesn't eat shit
@@ -130,7 +130,7 @@ typedef RenderObject (*BuildCB)();
 #define BUILDER_getChildren HASCHILDREN_getChildren
 #define BUILDER_handleEvent EVENTPASSTHROUGH_handleEvent
 #define BUILDER_draw(name) { \
-    RenderObjectVec* children = RO_getChildren(self); /* Not strictly needed but we do things properly around here */ \
+    RenderObjectVec* children = &cfg->_children; \
     if (ctx->needsRedraw) { \
         if (children->len != 0) RO_destroy(GET(*children, 0)); \
         APPEND(*children, cfg->buildCB()); /* todo: i'm like so sure this will work with the pointer yeah cos it's a macro yeah it's gotta mutate the original frfr */ \
@@ -138,7 +138,7 @@ typedef RenderObject (*BuildCB)();
     RO_setBounds(GET(*children, 0), ctx->pos, ctx->size); \
     RO_draw(GET(*children, 0)); \
 }
-#define BUILDER_destroy(name) { if (cfg->_child != 0) RO_destroy(cfg->_child); EXT_CALLSUPER(name, init); }
+#define BUILDER_destroy(name) { RenderObjectVec* children = &cfg->_children; if (children->len > 0) RO_destroy(GET(*children, 0)); HASCHILDREN_destroy(name) }
 
 #define DECL_VALUELISTENABLE(type) \
 typedef void (*_##type##_subscriberCB)(type); \
@@ -178,7 +178,7 @@ void destroy_##type##_listenable(type##_listenable* listenable) { \
     DESTROY(listenable->subscribers); \
 }
 
-// todo: is preprocessor chilling with struct members
+// todo: is preprocessor chilling with struct members?!?!
 #define DECL_VALUELISTENER(type) DECL_WIDGET_EXTENDED(type##_listener, type##_listenable* listenable; type##_subscription _subscription;, BUILDER)
 
 #define DEF_VALUELISTENER(type) \
