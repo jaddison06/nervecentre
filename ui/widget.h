@@ -15,9 +15,9 @@ DECL_VEC_NAMED(RenderObject*, RenderObjectVec)
 typedef void (*RenderObjectMethod)(RenderContext*, void*);
 typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 
-#define _DECL_RO_PROC(name, type) type RO_##name(RenderObject* obj);
-#define _DEF_RO_PROC_AUTO(name, type) type RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
-#define _DEF_RO_PROC_WRAPPED(name, type) type _RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
+#define _DECL_RO_PROC(name, type) inline type RO_##name(RenderObject* obj);
+#define _DEF_RO_PROC_AUTO(name, type) inline type RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
+#define _DEF_RO_PROC_WRAPPED(name, type) inline type _RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
 // User defined method is methodName, no-extension wrapper is _methodName, extension defines _methodName which can then call generated wrapper __methodName
 #define _DEF_RO_METHOD_NORETURN(name, method) inline void _##method##name(RenderContext* ctx, void* cfg) { if (method##name != 0) { method##name(ctx, (name##Config*)cfg); } }
 #define _DEF_RO_METHOD_NORETURN_EXT(name, method) inline void __##method##name(RenderContext* ctx, void* _cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) method##name(ctx, cfg); } }
@@ -26,8 +26,12 @@ typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 #define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) { return method##name(ctx, cfg); } return 0; }
 #define _RO_METHOD(name, method) .method = _##method##name
 
-// i put this all on one line so the framework LOC would be an angel number
-struct RenderContext { Vec2 pos, size; Platform* platform; bool needsRedraw; RenderObject* parent; };
+struct RenderContext {
+    Vec2 pos, size;
+    Platform* platform;
+    bool needsRedraw;
+    RenderObject* parent;
+};
 
 //! METHODS
 struct RenderObject {
@@ -101,11 +105,16 @@ _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_ME
     } \
 }
 
-#define DEF_EVENT_PASSTHROUGH(name) void handleEvent##name(RenderContext* ctx, name##Config cfg) _EVENT_PASSTHROUGH
-
 #define EXT_CALLSUPER(name, method) return __method##name(ctx, &cfg->cfg)
 
 //! ---------- FRAMEWORK EXTENSIONS, STRUCTS AND WIDGETS ----------
+
+#define EVENTPASSTHROUGH_members(name)
+#define EVENTPASSTHROUGH_init(name) EXT_CALLSUPER(name, init)
+#define EVENTPASSTHROUGH_getChildren(name) EXT_CALLSUPER(name, getChildren)
+#define EVENTPASSTHROUGH_handleEvent(name) _EVENT_PASSTHROUGH
+#define EVENTPASSTHROUGH_draw(name) EXT_CALLSUPER(name, draw)
+#define EVENTPASSTHROUGH_destroy(name) EXT_CALLSUPER(name, destroy)
 
 #define HASCHILDREN_members(name) RenderObjectVec _children;
 #define HASCHILDREN_init(name) { INIT(cfg->_children); EXT_CALLSUPER(name, init); }
@@ -119,7 +128,7 @@ typedef RenderObject (*BuildCB)();
 #define BUILDER_members(name) BuildCB buildCB; HASCHILDREN_members(name)
 #define BUILDER_init HASCHILDREN_init
 #define BUILDER_getChildren HASCHILDREN_getChildren
-#define BUILDER_handleEvent(name) _EVENT_PASSTHROUGH
+#define BUILDER_handleEvent EVENTPASSTHROUGH_handleEvent
 #define BUILDER_draw(name) { \
     RenderObjectVec* children = RO_getChildren(self); /* Not strictly needed but we do things properly around here */ \
     if (ctx->needsRedraw) { \

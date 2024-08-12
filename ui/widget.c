@@ -6,7 +6,7 @@ static Platform* platform = NULL;
 //! METHODS
 _DEF_RO_PROC_AUTO(init, void)
 _DEF_RO_PROC_AUTO(getChildren, RenderObjectVec*)
-_DEF_RO_PROC_AUTO(handleEvent, void)
+_DEF_RO_PROC_WRAPPED(handleEvent, void)
 _DEF_RO_PROC_WRAPPED(draw, void)
 _DEF_RO_PROC_WRAPPED(destroy, void)
 
@@ -14,6 +14,21 @@ void RO_draw(RenderObject* obj) {
     obj->ctx.platform = platform;
     _RO_draw(obj);
     obj->ctx.needsRedraw = false;
+}
+
+// todo: mouse drag?!?!?!?!?!?!?! (NEEDS PLATFORM WORK)
+void RO_handleEvent(RenderObject* obj) {
+    Vec2 eventPos = obj->ctx.platform->event.ui.pos;
+    Vec2 objPos = obj->ctx.pos;
+    Vec2 objSize = obj->ctx.size;
+    if (
+        eventPos.x >= objPos.x &&
+        eventPos.x <= objPos.x + objSize.x &&
+        eventPos.y >= objPos.y &&
+        eventPos.y <= objPos.y + objSize.y
+    ) {
+        _RO_handleEvent(obj);
+    }
 }
 
 void RO_destroy(RenderObject* obj) {
