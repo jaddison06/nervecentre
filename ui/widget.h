@@ -26,12 +26,8 @@ typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 #define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) { return method##name(ctx, cfg); } return 0; }
 #define _RO_METHOD(name, method) .method = _##method##name
 
-struct RenderContext {
-    Vec2 pos, size;
-    Platform* platform;
-    bool needsRedraw;
-    RenderObject* parent;
-};
+// i put this all on one line so the framework LOC would be an angel number
+struct RenderContext { Vec2 pos, size; Platform* platform; bool needsRedraw; RenderObject* parent; };
 
 //! METHODS
 struct RenderObject {

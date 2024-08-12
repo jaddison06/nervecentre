@@ -66,16 +66,21 @@ inline RenderObjectVec ROList(int count, ...) {
 void RunUI(Platform* p, RenderObject* root, TextInputHandler textCB) {
     platform = p;
     bool quit = false;
+#define _UPDATE_ROOTSIZE() RO_setBounds(root, V2(0, 0), GetSize(platform))
+    _UPDATE_ROOTSIZE();
     while (!quit) {
         Event* event;
         while ((event = GetEvent(platform)) != NULL) {
+            if (event->class = Event_None) continue;
             if (event->class == Event_HandleAtTopLevel) {
-                if (event->tlType == EventType_Quit) { quit = true; break; }
-                if (event->tlType == EventType_TextInput) { textCB(event->text); continue; }
-            } else {
-                RO_handleEvent(root);
-            }
+                switch (event->tlType) {
+                    case EventType_Quit: { quit = true; goto draw; } // HAHAHAHHAHAHAHHAHAHAHA
+                    case EventType_TextInput: { textCB(event->text); continue; }
+                    case EventType_WindowResized: { _UPDATE_ROOTSIZE(); break; }
+                }
+            } else { RO_handleEvent(root); }
         }
-        RO_draw(root);
+        draw: RO_draw(root);
     };
+#undef _UPDATE_ROOTSIZE
 }

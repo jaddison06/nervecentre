@@ -73,6 +73,15 @@ Event* GetEvent(Platform* self) {
             strcpy(self->event.text, self->eventRaw.text.text);
             break;
         }
+        case SDL_WINDOWEVENT: {
+            if (self->eventRaw.window.type == SDL_WINDOWEVENT_RESIZED) {
+                self->event.class = Event_HandleAtTopLevel;
+                self->event.tlType = EventType_WindowResized;
+                self->event.size.x = self->eventRaw.window.data1;
+                self->event.size.y = self->eventRaw.window.data2;
+                break;
+            }
+        }
         case SDL_MOUSEMOTION: {
             self->event.class = Event_Passthrough;
             self->event.ui.type = EventType_MouseMotion;
@@ -94,6 +103,10 @@ Event* GetEvent(Platform* self) {
             self->event.ui.pos.x = self->eventRaw.button.x;
             self->event.ui.pos.y = self->eventRaw.button.y;
             self->event.ui.button = TranslateMouseButton(self->eventRaw.button.button);
+            break;
+        }
+        default: {
+            self->event.class = Event_None;
             break;
         }
     }

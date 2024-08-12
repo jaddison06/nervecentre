@@ -8,12 +8,14 @@
 // I can do what the fuck I want it's my software
 typedef enum {
     Event_HandleAtTopLevel,
-    Event_Passthrough
+    Event_Passthrough,
+    Event_None
 } EventClass;
 
 typedef enum {
     EventType_Quit,
-    EventType_TextInput
+    EventType_TextInput,
+    EventType_WindowResized,
 } TopLevelEvent;
 
 typedef enum {
@@ -38,6 +40,7 @@ typedef struct {
 typedef struct {
     EventClass class;
     char* text;
+    Vec2 size;
     TopLevelEvent tlType;
     UIEvent ui;
 } Event;
