@@ -26,10 +26,10 @@ typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 #define _DEF_RO_PROC_WRAPPED(name, type) type _RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
 // User defined method is methodName, no-extension wrapper is _methodName, extension defines _methodName which can then call generated wrapper __methodName
 #define _DEF_RO_METHOD_NORETURN(name, method) inline void _##method##name(RenderContext* ctx, void* cfg) { if (method##name != 0) { method##name(ctx, (name##Config*)cfg); } }
-#define _DEF_RO_METHOD_NORETURN_EXT(name, method) inline void __##method##name(RenderContext* ctx, void* _cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (_method##name != 0) _method##name(ctx, cfg); } }
+#define _DEF_RO_METHOD_NORETURN_EXT(name, method) inline void __##method##name(RenderContext* ctx, void* _cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) method##name(ctx, cfg); } }
 // MUST RETURN A POINTER SO WE CAN NULL OUT IF THE METHOD DOESN'T EXIST!!!!!!!!!!!
-#define _DEF_RO_METHOD_WITHRETURN(name, method, type) inline type _##method##name(RenderContext* ctx, void* _cfg) { if (method##name != 0) { return method##name(ctx, (name##Config*)cfg); }return 0; }
-#define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (_method##name != 0) { return _method##name(ctx, cfg); } return 0; }
+#define _DEF_RO_METHOD_WITHRETURN(name, method, type) inline type _##method##name(RenderContext* ctx, void* _cfg) { if (method##name != 0) { return method##name(ctx, (name##Config*)cfg); } return 0; }
+#define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) { return method##name(ctx, cfg); } return 0; }
 #define _RO_METHOD(name, method) .method = _##method##name
 
 //! METHODS
@@ -67,6 +67,8 @@ _DEF_RO_METHOD_NORETURN(name, destroy) \
 RenderObject* name(name##Config cfg) { name##Config* configPtr = (name##Config*)malloc(sizeof(name##Config)); *configPtr = cfg; RenderObject* out = malloc(sizeof(RenderObject)); *out = (RenderObject){.config = configPtr, .ctx = _create_RenderContext(out),\
 _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_METHOD(name, draw), _RO_METHOD(name, destroy)}; return out; }
 
+#define _DEF_EXT_METHOD(ext, name, method, returnType) returnType _##method##name(RenderContext* ctx, name##ExtendedConfig* cfg) { ext##_method(name) }
+
 //! METHODS x3
 #define DECL_WIDGET_EXTENDED(name, ext) \
 typedef struct name##ExtendedConfig { ext##_members(name) name##Config cfg; } \
@@ -75,11 +77,11 @@ _DEF_RO_METHOD_WITHRETURN_EXT(name, getChildren, RenderObjectVec*) \
 _DEF_RO_METHOD_NORETURN_EXT(name, handleEvent) \
 _DEF_RO_METHOD_NORETURN_EXT(name, draw) \
 _DEF_RO_METHOD_NORETURN_EXT(name, destroy) \
-ext##_init(name) \
-ext##_getChildren(name) \
-ext##_handleEvent(name) \
-ext##_draw(name) \
-ext##_destroy(name) \
+_DEF_EXT_METHOD(ext, name, init, void) \
+_DEF_EXT_METHOD(ext, name, getChildren, RenderObjectVec*) \
+_DEF_EXT_METHOD(ext, name, handleEvent, void) \
+_DEF_EXT_METHOD(ext, name, draw, void) \
+_DEF_EXT_METHOD(ext, name, destroy, void) \
 RenderObject* name(name##ExtendedConfig cfg) { name##ExtendedConfig* configPtr = (name##ExtendedConfig*)malloc(sizeof(name##ExtendedConfig)); *configPtr = cfg; RenderObject* out = malloc(sizeof(RenderObject)); *out = (RenderObject){.config = configPtr, .ctx = _create_RenderContext(out),\
 _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_METHOD(name, draw), _RO_METHOD(name, destroy)}; return out; }
 
@@ -94,49 +96,33 @@ _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_ME
 
 #define DEF_EVENT_PASSTHROUGH(name) void handleEvent##name(RenderContext* ctx, name##Config cfg) _EVENT_PASSTHROUGH
 
-#define _EXT_CALLSUPER(name, method) return __method##name(ctx, &cfg->cfg);
-#define _DEF_EXT_METHOD(name, method, returnType, code, callAfer) returnType _##method##name(RenderContext* ctx, name##ExtendedConfig* cfg) { code callAfter }
-#define EXT_INSERTBEFORE(name, method, returnType, code) _DEF_EXT_METHOD(name, method, returnType, code, _EXT_CALLSUPER(name, method))
-#define EXT_REPLACE(name, method, returnType, code) _DEF_EXT_METHOD(name, method, returnType, code,)
-#define EXT_PASSTHROUGH(name, method, returnType) inline returnType _method##name(RenderContext* ctx, name##ExtendedConfig* cfg) { _EXT_CALLSUPER(name, method) }
+#define EXT_CALLSUPER(name, method) return __method##name(ctx, &cfg->cfg)
 
-//! ---------- FRAMEWORK WIDGETS, STRUCTS & EXTENSIONS ----------
+//! ---------- FRAMEWORK EXTENSIONS, STRUCTS AND WIDGETS ----------
 
-//* todo: how do we
-//*   a) compose multiple extensions together for a widget (preferably dynamically)
-//*   b) nest extensions (eg builder <-- singlechild)
+#define HASCHILDREN_members(name) RenderObjectVec _children;
+#define HASCHILDREN_init(name) { INIT(cfg->_children); EXT_CALLSUPER(name, init); }
+#define HASCHILDREN_getChildren(name) { return &cfg->_children; }
+#define HASCHILDREN_handleEvent(name) EXT_CALLSUPER(name, handleEvent)
+#define HASCHILDREN_draw(name) EXT_CALLSUPER(name, draw)
+#define HASCHILDREN_destroy(name) { DESTROY(cfg->_children); EXT_CALLSUPER(name, destroy); }
 
 typedef RenderObject (*BuildCB)();
-#define BUILDER_members(name) BuildCB buildCB; RenderObjectVec _child;
-#define BUILDER_init(name) EXT_INSERTBEFORE(name, init, void, { INIT(cfg->_child) })
-#define BUILDER_getChildren(name) EXT_REPLACE(name, getChildren, RenderObjectVec*, { return &cfg->_child; })
-#define BUILDER_handleEvent(name) EXT_REPLACE(name, handleEvent, void, _EVENT_PASSTHROUGH)
-#define BUILDER_draw(name) EXT_REPLACE(name, draw, void, { \
+// Yippeeeeeee extension nesting i sure do hope this doesn't eat shit
+#define BUILDER_members(name) BuildCB buildCB; HASCHILDREN_members(name)
+#define BUILDER_init HASCHILDREN_init
+#define BUILDER_getChildren HASCHILDREN_getChildren
+#define BUILDER_handleEvent(name) _EVENT_PASSTHROUGH
+#define BUILDER_draw(name) { \
+    RenderObjectVec* children = RO_getChildren(self); /* Not strictly needed but we do things properly around here */ \
     if (ctx->needsRedraw) { \
-        if (cfg->child.len != 0) RO_destroy(GET(cfg->_child, 0)); \
-        APPEND(cfg->_child, cfg->buildCB()); \
+        if (children->len != 0) RO_destroy(GET(*children, 0)); \
+        APPEND(*children, cfg->buildCB()); /* todo: i'm like so sure this will work with the pointer yeah cos it's a macro yeah it's gotta mutate the original frfr */ \
     } \
-    RenderObject* child = GET(cfg->_child, 0); \
-    RO_setBounds(child, ctx->pos, ctx->size); \
-    RO_draw(child); \
-})
-#define BUILDER_destroy(name) EXT_INSERTBEFORE(name, destroy, void, { \
-    if (cfg->_child != 0) RO_destroy(cfg->_child); \
-})
-
-//* todo:
-//*   a) this doesn't actually initialize shit
-//*   b) generalize to haschildren
-#define SINGLECHILD_members(name) RenderObjectVec _children;
-#define SINGLECHILD_init(name) EXT_INSERTBEFORE(name, init, void, INIT(cfg->_children))
-#define SINGLECHILD_getChildren(name) EXT_REPLACE(name, getChildren, RenderObjectVec* { \
-    return cfg->_children; \
-})
-#define SINGLECHILD_handleEvent(name) EXT_PASSTHROUGH(name, handleEvent, void)
-#define SINGLECHILD_draw(name) EXT_PASSTHROUGH(name, draw, void)
-#define SINGLECHILD_destroy(name) EXT_INSERTBEFORE(name, destroy, void, { \
-    DESTROY(cfg->_children); \
-})
+    RO_setBounds(GET(*children, 0), ctx->pos, ctx->size); \
+    RO_draw(GET(*children, 0)); \
+}
+#define BUILDER_destroy(name) { if (cfg->_child != 0) RO_destroy(cfg->_child); EXT_CALLSUPER(name, init); }
 
 #define DECL_VALUELISTENABLE(type) \
 typedef void (*_##type##_subscriberCB)(type); \
