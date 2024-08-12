@@ -7,16 +7,10 @@
 #include "platform.h"
 #include "ui_types.h"
 
-typedef struct {
-    Vec2 pos, size;
-    Platform* platform;
-    bool needsRedraw;
-    RenderObject* parent;
-} RenderContext;
-
 typedef void (*TextInputHandler)(char*);
 
 typedef struct RenderObject RenderObject;
+typedef struct RenderContext RenderContext;
 DECL_VEC_NAMED(RenderObject*, RenderObjectVec)
 typedef void (*RenderObjectMethod)(RenderContext*, void*);
 typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
@@ -31,6 +25,13 @@ typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 #define _DEF_RO_METHOD_WITHRETURN(name, method, type) inline type _##method##name(RenderContext* ctx, void* _cfg) { if (method##name != 0) { return method##name(ctx, (name##Config*)cfg); } return 0; }
 #define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) { return method##name(ctx, cfg); } return 0; }
 #define _RO_METHOD(name, method) .method = _##method##name
+
+struct RenderContext {
+    Vec2 pos, size;
+    Platform* platform;
+    bool needsRedraw;
+    RenderObject* parent;
+};
 
 //! METHODS
 struct RenderObject {
@@ -57,8 +58,17 @@ _DECL_RO_PROC(handleEvent, void)
 _DECL_RO_PROC(draw, void)
 _DECL_RO_PROC(destroy, void)
 
+//! METHODS
+#define _DECL_WIDGET_MEMBERS(name, configMembers) typedef struct { configMembers } name##Config; \
+void init##name(RenderContext* ctx, name##Config *cfg); \
+RenderObjectVec* getChildren##name(RenderContext* ctx, name##Config *cfg); \
+void handleEvent##name(RenderContext* ctx, name##Config *cfg); \
+void draw##name(RenderContext* ctx, name##Config *cfg); \
+void destroy##name(RenderContext* ctx, name##Config *cfg); \
+
 //! METHODS x2
-#define DECL_WIDGET(name) \
+#define DECL_WIDGET(name, configMembers) \
+_DECL_WIDGET_MEMBERS(name, configMembers) \
 _DEF_RO_METHOD_NORETURN(name, init) \
 _DEF_RO_METHOD_WITHRETURN(name, getChildren, RenderObjectVec*) \
 _DEF_RO_METHOD_NORETURN(name, handleEvent) \
@@ -70,7 +80,8 @@ _RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_ME
 #define _DEF_EXT_METHOD(ext, name, method, returnType) returnType _##method##name(RenderContext* ctx, name##ExtendedConfig* cfg) { ext##_method(name) }
 
 //! METHODS x3
-#define DECL_WIDGET_EXTENDED(name, ext) \
+#define DECL_WIDGET_EXTENDED(name, configMembers, ext) \
+_DECL_WIDGET_MEMBERS(name, configMembers) \
 typedef struct name##ExtendedConfig { ext##_members(name) name##Config cfg; } \
 _DEF_RO_METHOD_NORETURN_EXT(name, init) \
 _DEF_RO_METHOD_WITHRETURN_EXT(name, getChildren, RenderObjectVec*) \
@@ -162,22 +173,15 @@ void destroy_##type##_listenable(type##_listenable* listenable) { \
     DESTROY(listenable->subscribers); \
 }
 
-#define DECL_VALUELISTENER(type) \
-typedef struct { type##_listenable* listenable; type##_subscription _subscription;} type##_listenerConfig \
-void init##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) \
-RenderObjectGetChildren getChildren##type##_listener = 0; \
-void handleEvent##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
-void draw##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
-void destroy##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) \
-DECL_WIDGET_EXTENDED(type##_listener, BUILDER)
+// todo: is preprocessor chilling with struct members
+#define DECL_VALUELISTENER(type) DECL_WIDGET_EXTENDED(type##_listener, type##_listenable* listenable; type##_subscription _subscription;, BUILDER)
 
 #define DEF_VALUELISTENER(type) \
 void init##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { \
-    void onChanged(type newVal) { \
-        RO_markNeedsRedraw(ctx->parent); \
-    } \
+    void onChanged(type newVal) { RO_markNeedsRedraw(ctx->parent); } \
     cfg->_subscription = type##_subscribe(cfg->listenable, onChanged); \
 } \
-void destroy##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { \
-    type##_unsubscribe(cfg->listenable, cfg->subscription.id); \
-}
+RenderObjectGetChildren getChildren##type##_listener = 0; \
+void handleEvent##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
+void draw##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
+void destroy##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { type##_unsubscribe(cfg->listenable, cfg->subscription.id); }
