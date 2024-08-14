@@ -12,118 +12,201 @@ typedef void (*TextInputHandler)(char*);
 typedef struct RenderObject RenderObject;
 typedef struct RenderContext RenderContext;
 DECL_VEC_NAMED(RenderObject*, RenderObjectVec)
-typedef void (*RenderObjectMethod)(RenderContext*, void*);
-typedef RenderObjectVec* (*RenderObjectGetChildren)(RenderContext*, void*);
 
-#define _DECL_RO_PROC(name, type) inline type RO_##name(RenderObject* obj);
-#define _DEF_RO_PROC_AUTO(name, type) inline type RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
-#define _DEF_RO_PROC_WRAPPED(name, type) inline type _RO_##name(RenderObject* obj) { return obj->name(&obj->ctx, obj->config); }
-// User defined method is methodName, no-extension wrapper is _methodName, extension defines _methodName which can then call generated wrapper __methodName
-#define _DEF_RO_METHOD_NORETURN(name, method) inline void _##method##name(RenderContext* ctx, void* cfg) { if (method##name != 0) { method##name(ctx, (name##Config*)cfg); } }
-#define _DEF_RO_METHOD_NORETURN_EXT(name, method) inline void __##method##name(RenderContext* ctx, void* _cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) method##name(ctx, cfg); } }
-// MUST RETURN A POINTER SO WE CAN NULL OUT IF THE METHOD DOESN'T EXIST!!!!!!!!!!!
-#define _DEF_RO_METHOD_WITHRETURN(name, method, type) inline type _##method##name(RenderContext* ctx, void* _cfg) { if (method##name != 0) { return method##name(ctx, (name##Config*)cfg); } return 0; }
-#define _DEF_RO_METHOD_WITHRETURN_EXT(name, method, type) inline type __##method##name(RenderContext* ctx, void* cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*)_cfg; if (method##name != 0) { return method##name(ctx, cfg); } return 0; }
-#define _RO_METHOD(name, method) .method = _##method##name
+//! METHODS
+// Any non-void method must return a POINTER so we can null out if the method doesn't exist
+#define _init_RETTYPE void
+#define _getChildren_RETTYPE RenderObjectVec*
+#define _handleEvent_RETTYPE void
+#define _draw_RETTYPE void
+#define _destroy_RETTYPE void
+
+#define _METHOD_RETTYPE(method) _##method##_RETTYPE
+
+#define _init_DEFAULT
+#define _getChildren_DEFAULT 0
+#define _handleEvent_DEFAULT
+#define _draw_DEFAULT
+#define _destroy_DEFAULT
+
+#define _METHOD_DEFAULTRET(method) _##method##_DEFAULT
+
+#define _METHOD_VAR(method) _METHOD_RETTYPE(method) (*method)(RenderContext*, void*)
 
 struct RenderContext {
-    Vec2 pos, size;
-    Platform* platform;
+    Vec2 pos, constrainSize, actualSize;
     bool needsRedraw;
     RenderObject* parent;
 };
 
 //! METHODS
 struct RenderObject {
-    void* config;
+#ifdef NCUI_DEBUG
+    char* _name;
+#endif
+    void* cfg;
     RenderContext ctx;
-    RenderObjectMethod init;
-    RenderObjectGetChildren getChildren;
-    RenderObjectMethod handleEvent;
-    RenderObjectMethod draw;
-    RenderObjectMethod destroy;
+    _METHOD_VAR(init);
+    _METHOD_VAR(getChildren);
+    _METHOD_VAR(handleEvent);
+    _METHOD_VAR(draw);
+    _METHOD_VAR(destroy);
 };
+
+#define _DECL_RC_PROC(method) extern inline _METHOD_RETTYPE(method) RC_##method(RenderContext* ctx);
+#define _DEF_RC_PROC(method) extern inline _METHOD_RETTYPE(method) RC_##method(RenderContext* ctx) { return RO_##method(ctx->parent); }
+#define _DECL_RO_PROC_AUTO(method) extern inline _METHOD_RETTYPE(method) RO_##method(RenderObject* obj); _DECL_RC_PROC(method)
+#define _DECL_RO_PROC_WRAPPED(method) extern inline _METHOD_RETTYPE(method) _RO_##method(RenderObject* obj); _METHOD_RETTYPE(method) RO_##method(RenderObject* obj); _DECL_RC_PROC(method)
+#define _DEF_RO_PROC_AUTO(method) extern inline _METHOD_RETTYPE(method) RO_##method(RenderObject* obj) { return obj->method(&obj->ctx, obj->cfg); } _DEF_RC_PROC(method)
+#define _DEF_RO_PROC_WRAPPED(method) extern inline _METHOD_RETTYPE(method) _RO_##method(RenderObject* obj) { return obj->method(&obj->ctx, obj->cfg); } _DEF_RC_PROC(method)
+// User defined method is methodName, wrapper is _methodName, extension defines __methodName which can then call generated wrapper _methodName
+#define _DECL_RO_METHOD(method, name) extern inline _METHOD_RETTYPE(method) _##method##name(RenderContext* ctx, void* cfg);
+#define _DEF_RO_METHOD(method, name) extern inline _METHOD_RETTYPE(method) _##method##name(RenderContext* ctx, void* cfg) { return method##name(ctx, (name##Config*)cfg); }
+#define _RO_METHOD(method, name) .method = _##method##name
+#define _RO_EXTMETHOD(method, name) .method = __##method##name
 
 RenderContext _create_RenderContext(RenderObject* parent);
 void RO_setBounds(RenderObject* obj, Vec2 pos, Vec2 size);
 void RO_markNeedsRedraw(RenderObject* obj);
+extern inline void RC_markNeedsRedraw(RenderContext* ctx);
 // Utility to create a new ROV from varargs
-inline RenderObjectVec ROList(int count, ...);
-void RunUI(Platform* p, RenderObject* root, TextInputHandler textCB);
+extern inline RenderObjectVec ROList(int count, ...);
+void RunUI(RenderObject* root, TextInputHandler textCB);
 
-//! METHODS
-_DECL_RO_PROC(init, void)
-_DECL_RO_PROC(getChildren, RenderObjectVec*)
-_DECL_RO_PROC(handleEvent, void)
-_DECL_RO_PROC(draw, void)
-_DECL_RO_PROC(destroy, void)
-
-//! METHODS
-#define _DECL_WIDGET_MEMBERS(name, configMembers) typedef struct { configMembers } name##Config; \
-void init##name(RenderContext* ctx, name##Config *cfg); \
-RenderObjectVec* getChildren##name(RenderContext* ctx, name##Config *cfg); \
-void handleEvent##name(RenderContext* ctx, name##Config *cfg); \
-void draw##name(RenderContext* ctx, name##Config *cfg); \
-void destroy##name(RenderContext* ctx, name##Config *cfg); \
-
-//! METHODS x2
-#define DECL_WIDGET(name, configMembers) \
-_DECL_WIDGET_MEMBERS(name, configMembers) \
-_DEF_RO_METHOD_NORETURN(name, init) \
-_DEF_RO_METHOD_WITHRETURN(name, getChildren, RenderObjectVec*) \
-_DEF_RO_METHOD_NORETURN(name, handleEvent) \
-_DEF_RO_METHOD_NORETURN(name, draw) \
-_DEF_RO_METHOD_NORETURN(name, destroy) \
-RenderObject* name(name##Config cfg) { name##Config* configPtr = (name##Config*)malloc(sizeof(name##Config)); *configPtr = cfg; RenderObject* out = malloc(sizeof(RenderObject)); *out = (RenderObject){.config = configPtr, .ctx = _create_RenderContext(out),\
-_RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_METHOD(name, draw), _RO_METHOD(name, destroy)}; return out; }
-
-#define _DEF_EXT_METHOD(ext, name, method, returnType) returnType _##method##name(RenderContext* ctx, name##ExtendedConfig* cfg) { ext##_method(name) }
-
-//! METHODS x3
-#define DECL_WIDGET_EXTENDED(name, configMembers, ext) \
-_DECL_WIDGET_MEMBERS(name, configMembers) \
-typedef struct name##ExtendedConfig { ext##_members(name) name##Config cfg; } \
-_DEF_RO_METHOD_NORETURN_EXT(name, init) \
-_DEF_RO_METHOD_WITHRETURN_EXT(name, getChildren, RenderObjectVec*) \
-_DEF_RO_METHOD_NORETURN_EXT(name, handleEvent) \
-_DEF_RO_METHOD_NORETURN_EXT(name, draw) \
-_DEF_RO_METHOD_NORETURN_EXT(name, destroy) \
-_DEF_EXT_METHOD(ext, name, init, void) \
-_DEF_EXT_METHOD(ext, name, getChildren, RenderObjectVec*) \
-_DEF_EXT_METHOD(ext, name, handleEvent, void) \
-_DEF_EXT_METHOD(ext, name, draw, void) \
-_DEF_EXT_METHOD(ext, name, destroy, void) \
-RenderObject* name(name##ExtendedConfig cfg) { name##ExtendedConfig* configPtr = (name##ExtendedConfig*)malloc(sizeof(name##ExtendedConfig)); *configPtr = cfg; RenderObject* out = malloc(sizeof(RenderObject)); *out = (RenderObject){.config = configPtr, .ctx = _create_RenderContext(out),\
-_RO_METHOD(name, init), _RO_METHOD(getChildren), _RO_METHOD(handleEvent), _RO_METHOD(name, draw), _RO_METHOD(name, destroy)}; return out; }
-
-#define _EVENT_PASSTHROUGH { \
+#define FOREACH_CHILD(obj, code) { \
     RenderObjectVec* children; \
-    if ((children = RO_getChildren(ctx->parent)) != 0) { \
-        FOREACH(RenderObject*, *children, child) { \
-            RO_handleEvent(child); \
+    if ((children = RO_getChildren(obj)) != 0) { \
+        FOREACH(RenderObject*, *children, _child) { \
+            RenderObject* child = *_child; \
+            { code } \
         } \
     } \
 }
 
-#define EXT_CALLSUPER(name, method) return __method##name(ctx, &cfg->cfg)
+#define NOP_METHOD(method, name) _METHOD_RETTYPE(method) method##name(RenderContext* context, name##Config* cfg) { return _METHOD_DEFAULTRET(method); }
+
+//! METHODS
+_DECL_RO_PROC_AUTO(init)
+_DECL_RO_PROC_AUTO(getChildren)
+_DECL_RO_PROC_WRAPPED(handleEvent)
+_DECL_RO_PROC_WRAPPED(draw)
+_DECL_RO_PROC_WRAPPED(destroy)
+
+#define _DECL_WIDGET_METHOD(method, name) _METHOD_RETTYPE(method) method##name(RenderContext* ctx, name##Config* cfg); 
+
+//! METHODS
+#define _DECL_WIDGET_MEMBERS(name, configMembers) typedef struct { configMembers } name##Config; \
+_DECL_WIDGET_METHOD(init, name) \
+_DECL_WIDGET_METHOD(getChildren, name) \
+_DECL_WIDGET_METHOD(handleEvent, name) \
+_DECL_WIDGET_METHOD(draw, name) \
+_DECL_WIDGET_METHOD(destroy, name)
+
+//! METHODS
+#define DECL_WIDGET(name, configMembers) \
+_DECL_WIDGET_MEMBERS(name, configMembers) \
+_DECL_RO_METHOD(init, name) \
+_DECL_RO_METHOD(getChildren, name) \
+_DECL_RO_METHOD(handleEvent, name) \
+_DECL_RO_METHOD(draw, name) \
+_DECL_RO_METHOD(destroy, name) \
+RenderObject* name(name##Config cfg);
+
+#ifdef NCUI_DEBUG
+#define _RO_NAMEFIELD(name) ._name = #name,
+#else
+#define _RO_NAMEFIELD(name)
+#endif
+
+//! METHODS
+#define DEF_WIDGET(name) \
+_DEF_RO_METHOD(init, name) \
+_DEF_RO_METHOD(getChildren, name) \
+_DEF_RO_METHOD(handleEvent, name) \
+_DEF_RO_METHOD(draw, name) \
+_DEF_RO_METHOD(destroy, name) \
+RenderObject* name(name##Config cfg) { name##Config* configPtr = (name##Config*)malloc(sizeof(name##Config)); *configPtr = cfg; RenderObject* out = (RenderObject*)malloc(sizeof(RenderObject)); *out = (RenderObject){_RO_NAMEFIELD(name) .cfg = configPtr, .ctx = _create_RenderContext(out),\
+_RO_METHOD(init, name), _RO_METHOD(getChildren, name), _RO_METHOD(handleEvent, name), _RO_METHOD(draw, name), _RO_METHOD(destroy, name) \
+}; RO_init(out); return out; }
+
+#define _DECL_EXT_METHOD(ext, method, name) _METHOD_RETTYPE(method) __##method##name(RenderContext* ctx, void* _cfg);
+#define _DEF_EXT_METHOD(ext, method, name) _METHOD_RETTYPE(method) __##method##name(RenderContext* ctx, void* _cfg) { name##ExtendedConfig* cfg = (name##ExtendedConfig*) _cfg; ext##_##method(name) }
+
+//! METHODS x2
+#define DECL_WIDGET_EXTENDED(name, configMembers, ext) \
+_DECL_WIDGET_MEMBERS(name, configMembers) \
+typedef struct { ext##_members(name) name##Config cfg; } name##ExtendedConfig; \
+_DECL_RO_METHOD(init, name) \
+_DECL_RO_METHOD(getChildren, name) \
+_DECL_RO_METHOD(handleEvent, name) \
+_DECL_RO_METHOD(draw, name) \
+_DECL_RO_METHOD(destroy, name) \
+_DECL_EXT_METHOD(ext, init, name) \
+_DECL_EXT_METHOD(ext, getChildren, name) \
+_DECL_EXT_METHOD(ext, handleEvent, name) \
+_DECL_EXT_METHOD(ext, draw, name) \
+_DECL_EXT_METHOD(ext, destroy, name) \
+RenderObject* name(name##ExtendedConfig cfg);
+
+//! MEHODS x3
+#define DEF_WIDGET_EXTENDED(name, ext) \
+_DEF_RO_METHOD(init, name) \
+_DEF_RO_METHOD(getChildren, name) \
+_DEF_RO_METHOD(handleEvent, name) \
+_DEF_RO_METHOD(draw, name) \
+_DEF_RO_METHOD(destroy, name) \
+_DEF_EXT_METHOD(ext, init, name) \
+_DEF_EXT_METHOD(ext, getChildren, name) \
+_DEF_EXT_METHOD(ext, handleEvent, name) \
+_DEF_EXT_METHOD(ext, draw, name) \
+_DEF_EXT_METHOD(ext, destroy, name) \
+RenderObject* name(name##ExtendedConfig cfg) { name##ExtendedConfig* configPtr = (name##ExtendedConfig*)malloc(sizeof(name##ExtendedConfig)); *configPtr = cfg; RenderObject* out = (RenderObject*)malloc(sizeof(RenderObject)); *out = (RenderObject){_RO_NAMEFIELD(name) .cfg = configPtr, .ctx = _create_RenderContext(out),\
+_RO_EXTMETHOD(init, name), _RO_EXTMETHOD(getChildren, name), _RO_EXTMETHOD(handleEvent, name), _RO_EXTMETHOD(draw, name), _RO_EXTMETHOD(destroy, name)}; RO_init(out); return out; }
+
+#define EXT_CALLSUPER(method, name) _##method##name(ctx, &cfg->cfg)
 
 //! ---------- FRAMEWORK EXTENSIONS, STRUCTS AND WIDGETS ----------
 
 #define EVENTPASSTHROUGH_members(name)
-#define EVENTPASSTHROUGH_init(name) EXT_CALLSUPER(name, init)
-#define EVENTPASSTHROUGH_getChildren(name) EXT_CALLSUPER(name, getChildren)
-#define EVENTPASSTHROUGH_handleEvent(name) _EVENT_PASSTHROUGH
-#define EVENTPASSTHROUGH_draw(name) EXT_CALLSUPER(name, draw)
-#define EVENTPASSTHROUGH_destroy(name) EXT_CALLSUPER(name, destroy)
+#define EVENTPASSTHROUGH_init(name) EXT_CALLSUPER(init, name);
+#define EVENTPASSTHROUGH_getChildren(name) return EXT_CALLSUPER(getChildren, name);
+#define EVENTPASSTHROUGH_handleEvent(name) FOREACH_CHILD(ctx->parent, RO_handleEvent(child);)
+#define EVENTPASSTHROUGH_draw(name) EXT_CALLSUPER(draw, name);
+#define EVENTPASSTHROUGH_destroy(name) EXT_CALLSUPER(destroy, name);
 
+// Need to #define DEFAULT_FONT ... before #including this header!!
+#define DEFAULTFONT_members(name) Font* _font;
+#define DEFAULTFONT_init(name) cfg->_font = CreateFont(DEFAULT_FONT); EXT_CALLSUPER(init, name);
+#define DEFAULTFONT_getChildren(name) return EXT_CALLSUPER(getChildren, name);
+#define DEFAULTFONT_handleEvent(name) EXT_CALLSUPER(handleEvent, name);
+#define DEFAULTFONT_draw(name) EXT_CALLSUPER(draw, name);
+#define DEFAULTFONT_destroy(name) EXT_CALLSUPER(destroy, name); DestroyFont(cfg->_font);
+
+#define DEFAULTFONT_GET(name) ((name##ExtendedConfig*)ctx->parent->cfg)->_font
+
+// Private `_children` field initialized and handled internally, useful for e.g. Builder
 #define HASCHILDREN_members(name) RenderObjectVec _children;
-#define HASCHILDREN_init(name) { INIT(cfg->_children); EXT_CALLSUPER(name, init); }
+#define HASCHILDREN_init(name) { INIT(cfg->_children); EXT_CALLSUPER(init, name); }
 #define HASCHILDREN_getChildren(name) { return &cfg->_children; }
-#define HASCHILDREN_handleEvent(name) EXT_CALLSUPER(name, handleEvent)
-#define HASCHILDREN_draw(name) EXT_CALLSUPER(name, draw)
-#define HASCHILDREN_destroy(name) { EXT_CALLSUPER(name, destroy); DESTROY(cfg->_children); }
+#define HASCHILDREN_handleEvent(name) EXT_CALLSUPER(handleEvent, name);
+#define HASCHILDREN_draw(name) EXT_CALLSUPER(draw, name);
+#define HASCHILDREN_destroy(name) { \
+    EXT_CALLSUPER(destroy, name); \
+    DESTROY(cfg->_children); \
+}
 
-typedef RenderObject (*BuildCB)();
+// Public `children` field passed in, initialized using `ROList()` and destroyed here
+#define TAKESCHILDREN_members(name) RenderObjectVec children;
+#define TAKESCHILDREN_init(name) EXT_CALLSUPER(init, name);
+#define TAKESCHILDREN_getChildren(name) return &cfg->children;
+#define TAKESCHILDREN_handleEvent(name) EXT_CALLSUPER(handleEvent, name);
+#define TAKESCHILDREN_draw(name) EXT_CALLSUPER(draw, name);
+#define TAKESCHILDREN_destroy(name) { \
+    EXT_CALLSUPER(destroy, name); \
+    DESTROY(cfg->children); /* We didn't initialize it but we're assuming it was passed in with `ROList()` so we've got the only ref */ \
+}
+
+typedef RenderObject* (*BuildCB)();
 // Yippeeeeeee extension nesting i sure do hope this doesn't eat shit
 #define BUILDER_members(name) BuildCB buildCB; HASCHILDREN_members(name)
 #define BUILDER_init HASCHILDREN_init
@@ -131,62 +214,67 @@ typedef RenderObject (*BuildCB)();
 #define BUILDER_handleEvent EVENTPASSTHROUGH_handleEvent
 #define BUILDER_draw(name) { \
     RenderObjectVec* children = &cfg->_children; \
-    if (ctx->needsRedraw) { \
-        if (children->len != 0) RO_destroy(GET(*children, 0)); \
-        APPEND(*children, cfg->buildCB()); /* todo: i'm like so sure this will work with the pointer yeah cos it's a macro yeah it's gotta mutate the original frfr */ \
+    if (children->len != 0) { \
+        RO_destroy(GET(*children, 0)); \
+        REMOVE(*children, 0); \
     } \
-    RO_setBounds(GET(*children, 0), ctx->pos, ctx->size); \
+    APPEND(*children, cfg->buildCB()); \
+    RO_setBounds(GET(*children, 0), ctx->pos, ctx->constrainSize); \
     RO_draw(GET(*children, 0)); \
+    ctx->actualSize = GET(*children, 0)->ctx.actualSize; \
 }
 #define BUILDER_destroy(name) { RenderObjectVec* children = &cfg->_children; if (children->len > 0) RO_destroy(GET(*children, 0)); HASCHILDREN_destroy(name) }
 
 #define DECL_VALUELISTENABLE(type) \
-typedef void (*_##type##_subscriberCB)(type); \
-typedef struct { _##type##_subscriberCB onChanged; int id; } _##type##_subscriber; \
+typedef void (*_##type##_subscriberCB)(type, void*); \
+typedef struct { _##type##_subscriberCB onChanged; void* callerData; int id; } _##type##_subscriber; \
 DECL_VEC(_##type##_subscriber) \
 typedef struct { type value; int nextID; _##type##_subscriberVec subscribers; } type##_listenable; \
-typedef struct { type* value; int id; } type##_subscription \
-type##_subscription type##_subscribe(type##_listenable* listenable, _##type##_subscriberCB onChanged); \
-void type##_unsubscribe(type##_listenable* listenable, int id); \
-type##_listenable new_##type##_listenable(type initialValue); \
+typedef struct { type* value; int id; } type##_subscription; \
+type##_listenable* new_##type##_listenable(type initialValue); \
 void update_##type##listenable(type##_listenable* listenable, type newVal); \
-void destroy_##type##_listenable(type##_listenable* listenable);
+void destroy_##type##_listenable(type##_listenable* listenable); \
+type##_subscription type##_subscribe(type##_listenable* listenable, _##type##_subscriberCB onChanged, void* callerData); \
+void type##_unsubscribe(type##_listenable* listenable, int id);
 
 #define DEF_VALUELISTENABLE(type) \
-type##_subscription type##_subscribe(type##_listenable* listenable, _##type##_subscriberCB onChanged) { \
+type##_listenable* new_##type##_listenable(type initialValue) { \
+    type##_listenable* out = malloc(sizeof(type##_listenable)); \
+    _##type##_subscriberVec subscribers; \
+    INIT(subscribers); \
+    *out = (type##_listenable){.value = initialValue, .nextID = 0, .subscribers = subscribers}; \
+    return out; \
+} \
+void update_##type##listenable(type##_listenable* listenable, type newVal) { \
+    listenable->value = newVal; \
+    FOREACH(_##type##_subscriber, listenable->subscribers, subscriber) { \
+        subscriber->onChanged(newVal, subscriber->callerData); \
+    } \
+} \
+void destroy_##type##_listenable(type##_listenable* listenable) { \
+    DESTROY(listenable->subscribers); \
+    free(listenable); \
+} \
+type##_subscription type##_subscribe(type##_listenable* listenable, _##type##_subscriberCB onChanged, void* callerData) { \
     int id = listenable->nextID++; \
-    APPEND(listenable->subscribers, (_##type##_subscriber){.onChanged = onChanged, .id = id}); \
-    return (type##_subscription){.value = &listenable.value, .id = id}; \
+    APPEND(listenable->subscribers, ((_##type##_subscriber){.onChanged = onChanged, .callerData = callerData, .id = id})); \
+    return (type##_subscription){.value = &listenable->value, .id = id}; \
 } \
 void type##_unsubscribe(type##_listenable* listenable, int id) { \
     for (int i = 0; i < listenable->subscribers.len; i++) { \
         if (GET(listenable->subscribers, i).id == id) { REMOVE(listenable->subscribers, i); break; } \
     } \
-} \
-type##_listenable new_##type##_listenable(type initialValue) { \
-    _##type##_subscriberVec subscribers; \
-    INIT(subscribers); \
-    return (type##_listenable){.value = initialValue, .nextID = 0, .subscribers = subscribers}; \
-} \
-void update_##type##listenable(type##_listenable* listenable, type newVal) { \
-    listenable->value = newVal; \
-    FOREACH(_##type##_subscriber, listenable->subscribers, subscriber) { \
-        subscriber->onChanged(newVal); \
-    } \
-} \
-void destroy_##type##_listenable(type##_listenable* listenable) { \
-    DESTROY(listenable->subscribers); \
 }
 
-// todo: is preprocessor chilling with struct members?!?!
 #define DECL_VALUELISTENER(type) DECL_WIDGET_EXTENDED(type##_listener, type##_listenable* listenable; type##_subscription _subscription;, BUILDER)
 
 #define DEF_VALUELISTENER(type) \
+DEF_WIDGET_EXTENDED(type##_listener, BUILDER) \
+void _onChanged_##type##_listener(type newVal, void* ctx) { RO_markNeedsRedraw(((RenderContext*)ctx)->parent); } \
 void init##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { \
-    void onChanged(type newVal) { RO_markNeedsRedraw(ctx->parent); } \
-    cfg->_subscription = type##_subscribe(cfg->listenable, onChanged); \
+    cfg->_subscription = type##_subscribe(cfg->listenable, _onChanged_##type##_listener, ctx); \
 } \
-RenderObjectGetChildren getChildren##type##_listener = 0; \
-void handleEvent##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
-void draw##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) = 0; \
-void destroy##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { type##_unsubscribe(cfg->listenable, cfg->subscription.id); }
+RenderObjectVec* getChildren##type##_listener(RenderContext* ctx, type##_listener##Config* cfg) { return 0; } \
+void handleEvent##type##_listener(RenderContext* ctx, type##_listener##Config* cfg) {} \
+void draw##type##_listener(RenderContext* ctx, type##_listener##Config* cfg) {} \
+void destroy##type##_listener(RenderContext* ctx, type##_listenerConfig* cfg) { type##_unsubscribe(cfg->listenable, cfg->_subscription.id); }

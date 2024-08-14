@@ -4,7 +4,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 // doesn't do any additional typedefs so theoretically ur in the clear
 // to have multiple identical vec types. probs best not to tho -
@@ -40,23 +39,23 @@
     free((vec).elemTempStorage); \
 } while(0)
 
+#define _append(vec, item, size, currentLength, currentCapacity) { \
+    if (currentLength == currentCapacity) { \
+        *vec = realloc(*vec, currentCapacity * size * 2); \
+        currentCapacity *= 2; \
+    } \
+    memcpy(&((*(char**)vec)[(currentLength) * size]), item, size); \
+    currentLength += 1; \
+} \
+
 // new and improved! can take an rvalue - no need to pass in temporary variables!!
 //
 // when passing struct literals w/ multiple members put BRACKETS around them - i know
 // what you mean but the precompiler doesn't :(
 #define APPEND(vec, item) do { \
     *(vec).elemTempStorage = (item); \
-    _append((void**)&((vec).root), (vec).elemTempStorage, sizeof(*(vec).elemTempStorage), &(vec).len, &(vec).cap); \
+    _append((void**)&((vec).root), (vec).elemTempStorage, sizeof(*(vec).elemTempStorage), (vec).len, (vec).cap); \
 } while(0)
-
-static void _append(void** vec, void* item, size_t size, int* currentLength, int* currentCapacity) {
-    if (*currentLength == *currentCapacity) {
-        *vec = realloc(*vec, *currentCapacity * size * 2);
-        *currentCapacity *= 2;
-    }
-    memcpy(&((*(char**)vec)[(*currentLength) * size]), item, size);
-    *currentLength += 1;
-}
 
 #define REMOVE(vec, idx) do { \
     memcpy(&(vec).root[idx], &(vec).root[idx + 1], sizeof(*(vec).root) * ((vec).len - idx - 1)); \

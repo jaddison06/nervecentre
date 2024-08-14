@@ -60,19 +60,25 @@ typedef TTF_Font Font;
 
 #endif
 
-Platform* CreatePlatform(char* windowTitle, bool fullscreen);
-void DestroyPlatform(Platform* self);
+// Global state (👎) = Singleton pattern (👍) get your head out your arse
+extern Platform* _platform;
+inline void SetPlatform(Platform* platform) { _platform = platform; }
 
-// Null if none left in queue
-Event* GetEvent(Platform* self);
-UIEvent GetUIEvent(Platform* self);
+Platform* InitPlatform(char* windowTitle, bool fullscreen);
+void DestroyPlatform();
 
-Vec2 GetSize(Platform* self);
-void SetDrawColour(Platform* self, Colour col);
-void FlushDisplay(Platform* self, Colour col);
-void DrawText(Platform* self, Font* font, char* text, Vec2 pos);
-void DrawRect(Platform* self, Vec2 pos, Vec2 size);
-void FillRect(Platform* self, Vec2 pos, Vec2 size);
+// Pull next event from queue, null if none left
+Event* NextEvent();
+// Returns last event pulled from queue (ie currently processing)
+extern inline Event* GetEvent();
+UIEvent GetUIEvent();
+
+Vec2 GetWindowSize();
+void SetDrawColour(Colour col);
+void FlushDisplay();
+void DrawText(Font* font, char* text, Vec2 pos);
+void DrawRect(Vec2 pos, Vec2 size);
+void FillRect(Vec2 pos, Vec2 size);
 
 Font* CreateFont(char* family, int size);
 void DestroyFont(Font* self);
